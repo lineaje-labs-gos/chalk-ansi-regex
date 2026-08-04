@@ -159,6 +159,29 @@ test('does not match ESC followed by unsupported final', t => {
 	t.is(inputString.match(ansiRegex()), null);
 });
 
+test('an unterminated OSC sequence does not consume a later one', t => {
+	// The payload used to scan ahead for a terminator, so an unterminated `ESC ]` swallowed everything up to the next sequence's terminator, deleting the visible text in between.
+	const inputString = '\u001B]0;unterminated text \u001B]8;;https://example.com\u0007link';
+	t.true(inputString.replace(ansiRegex(), '').includes('text'));
+	t.false(inputString.replace(ansiRegex(), '').includes('https://example.com'));
+});
+
+test('an OSC sequence does not consume a later sequence after an unexpected ESC', t => {
+	const inputString = '\u001B]:payload\u001B[31mvisible\u001B]8;;https://example.com\u0007';
+	t.deepEqual(inputString.match(ansiRegex()), [
+		'\u001B[31m',
+		'\u001B]8;;https://example.com\u0007',
+	]);
+	t.is(inputString.replace(ansiRegex(), ''), '\u001B]:payloadvisible');
+});
+
+test('match OSC sequences containing non-terminator control characters', t => {
+	for (const terminator of ['\u0007', '\u001B\u005C', '\u009C']) {
+		const inputString = `\u001B]0;title\u0000\u0008\n\u000B\u000C\u000D${terminator}`;
+		t.is(inputString.match(ansiRegex())[0], inputString);
+	}
+});
+
 // Testing against extended codes (excluding codes ending in 0-9)
 for (const [codeSetKey, codeSetValue] of Object.entries(ansiCodes)) {
 	for (const [code, codeInfo] of codeSetValue) {
